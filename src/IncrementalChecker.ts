@@ -8,6 +8,8 @@ import FilesWatcher = require('./FilesWatcher');
 import WorkSet = require('./WorkSet');
 import NormalizedMessage = require('./NormalizedMessage');
 import CancellationToken = require('./CancellationToken');
+import {arrayify} from 'tslint/lib/utils';
+import {Minimatch} from 'minimatch';
 
 class IncrementalChecker {
   programConfigFile: string;
@@ -178,9 +180,7 @@ class IncrementalChecker {
     }
 
     // select files to lint
-    const filesToLint = this.files.keys().filter(filePath =>
-      !endsWith(filePath, '.d.ts') && !this.files.getData(filePath).linted
-    );
+    const filesToLint = this.getFilesToLint();
 
     // calculate subset of work to do
     const workSet = new WorkSet(filesToLint, this.workNumber, this.workDivision);
@@ -224,6 +224,21 @@ class IncrementalChecker {
     // normalize and deduplicate lints
     return NormalizedMessage.deduplicate(
       lints.map(NormalizedMessage.createFromLint)
+    );
+  }
+
+  private getFilesToLint(): string[] {
+    const exclude = this.linterConfig.linterOptions.exclude;
+    const ignore = arrayify(exclude).map(str => str.replace(/^'|'$/g, ""));
+    let files = this.files.keys();
+
+    if (ignore.length !== 0) {
+        const mm = ignore.map((pattern) => new Minimatch(path.resolve(pattern)));
+        files = files.filter((file) => !mm.some((matcher) => matcher.match(file)));
+    }
+
+    return files.filter(filePath =>
+        !endsWith(filePath, '.d.ts') && !this.files.getData(filePath).linted
     );
   }
 }
